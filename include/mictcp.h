@@ -20,7 +20,7 @@
 // et peuvent être modifiés)
 typedef enum protocol_state
 {
-    CLOSED, SYN_SENT, SYN_RECEIVED, ESTABLISHED, CLOISING  
+    CLOSED, SYN_SENT, SYN_RECEIVED, ESTABLISHED, CLOISING,IDLE  
 } protocol_state;
 
 // Mode de démarrage du protocole 

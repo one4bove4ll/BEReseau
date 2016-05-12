@@ -14,7 +14,7 @@ int app_buffer_set(mic_tcp_payload);
 void set_loss_rate(unsigned short);
 unsigned long get_now_time_msec();
 unsigned long get_now_time_usec();
-
+int set_RTT(unsigned int);
 
 
 

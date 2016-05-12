@@ -19,7 +19,8 @@ float jump = 0;
 float range = 0;
 int count = 0;
 int reverse = 1;
-
+unsigned int RTT = 0;
+start_mode stm;
 
 
 
@@ -38,6 +39,7 @@ unsigned int app_buffer_count = 0;
 
 int initialize_components(start_mode mode)
 {
+    stm = mode;
     int s;
     if(initialized != -1) return initialized;    
     if((sys_socket = socket(AF_INET, SOCK_DGRAM, 0)) == -1) return -1;
@@ -102,6 +104,7 @@ int initialize_components(start_mode mode)
 int IP_send(mic_tcp_pdu pk, mic_tcp_sock_addr addr)
 {
     if(initialized == -1) return -1;
+    if(stm == SERVER) usleep(RTT);
     if(loss_rate == 0)
     {
         mic_tcp_payload tmp = get_full_stream(pk);        
@@ -234,8 +237,10 @@ int app_buffer_get(mic_tcp_payload app_buff)
         {            
             app_buffer_first = app_buffer_first->next;
         }
+        
+        int tsize = min_size(tmp.size, app_buff.size);
 
-        memcpy(app_buff.data, tmp.data, min_size(tmp.size, app_buff.size));
+        memcpy(app_buff.data, tmp.data, tsize);
 
         app_buffer_size -= tmp.size;
         app_buffer_count --;
@@ -322,12 +327,16 @@ void set_loss_rate(unsigned short rate)
     loss_rate = rate;
 }
 
-void print_header(mic_tcp_payload bf)
-{
-    mic_tcp_header hd = get_header(bf.data);
-    printf("\nSP: %d, DP: %d, SEQ: %d, ACK: %d, Count: %d, Size: %d.", hd.source_port, hd.dest_port, hd.seq_num, hd.ack_num, app_buffer_count, app_buffer_size);
-}
 
+int set_RTT(unsigned int rtt)
+{
+    if(rtt < 1000000)
+    {
+        RTT = rtt;
+        return 0;
+    }
+    return -1;
+}
 
 unsigned long get_now_time_msec()
 {
@@ -341,11 +350,19 @@ unsigned long get_now_time_usec()
     return ((unsigned long)(now_time.tv_usec +(now_time.tv_sec * 1000000)));
 }
 
+void print_header(mic_tcp_payload bf)
+{
+    mic_tcp_header hd = get_header(bf.data);
+    printf("\nSP: %d, DP: %d, SEQ: %d, ACK: %d, Count: %d, Size: %d.", hd.source_port, hd.dest_port, hd.seq_num, hd.ack_num, app_buffer_count, app_buffer_size);
+}
+
 int min_size(int s1, int s2)
 {
     if(s1 <= s2) return s1;
     return s2;
 }
+
+
 
 
 

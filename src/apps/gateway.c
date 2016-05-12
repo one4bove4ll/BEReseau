@@ -15,6 +15,7 @@
 extern errno;
 
 #define MAX_UDP_SEGMENT_SIZE 1480
+#define CUMULATED_BUFF_NB 1
 
 /**
  * Function that performs UDP to TCP behavioral adaptation making it look like TCP was used.
@@ -28,6 +29,7 @@ void udp_to_tcp(struct sockaddr_in listen_on, struct sockaddr_in transmit_to, in
 
      // A buffer used to store received segments before they are forwarded
      char buffer[MAX_UDP_SEGMENT_SIZE];
+     
 
      // Addresses for the work to be performed
      struct sockaddr_in serv_addr = listen_on;
@@ -367,6 +369,13 @@ void mictcp_to_udp(struct sockaddr_in listen_on, struct sockaddr_in transmit_to)
 
      // A buffer used to store received segments before they are forwarded
      char buffer[MAX_UDP_SEGMENT_SIZE];
+     int rcv_values [CUMULATED_BUFF_NB];    
+     char* Buff [CUMULATED_BUFF_NB];
+     int iii;
+     for (iii=0; iii<CUMULATED_BUFF_NB; iii++)
+     {
+         Buff[iii] = malloc(MAX_UDP_SEGMENT_SIZE);
+     }
 
      // Addresses for the work to be performed
      struct sockaddr_in serv_addr = listen_on;
@@ -401,17 +410,30 @@ void mictcp_to_udp(struct sockaddr_in listen_on, struct sockaddr_in transmit_to)
 
      // Main activity loop, we never exit this, user terminates with SIGKILL
      while(1) {
-          bzero(buffer, MAX_UDP_SEGMENT_SIZE);
-
-          n = mic_tcp_recv(mic_tcp_sockfd, buffer, MAX_UDP_SEGMENT_SIZE);
-          if (n <= 0) {
-               printf("ERROR on mic_recv on the MICTCP socket\n");
-          }
+         int k;
+         for(k=0; k<CUMULATED_BUFF_NB; k++) 
+         {
+            bzero(Buff[k], MAX_UDP_SEGMENT_SIZE);
+         }
+         
+         for(k=0; k<CUMULATED_BUFF_NB; k++) 
+         {
+              n = mic_tcp_recv(mic_tcp_sockfd, Buff[k], MAX_UDP_SEGMENT_SIZE);
+              if (n <= 0) {
+                   printf("ERROR on mic_recv on the MICTCP socket\n");
+              }
+         }
           // We forward the packet to its final destination
-          n = sendto(sending_sockfd, buffer, n, 0, (struct sockaddr *) &transmit_to, len);
-          if (n <= 0) {
-               perror(0);
-          } 
+         
+         for(k=0; k<CUMULATED_BUFF_NB; k++) 
+         {
+              n = sendto(sending_sockfd, Buff[k], n, 0, (struct sockaddr *) &transmit_to, len);
+              if (n <= 0) {
+                   perror(0);
+              } 
+         }
+         
+         //sleep(1);
      }
 
      // We never execute this but anyway, for sanity
