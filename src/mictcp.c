@@ -8,6 +8,11 @@ mic_tcp_sock socket_distant ;
 unsigned int num_sequence=0;
 unsigned int num_ack = 0 ;
 unsigned int timer = 1000 ;
+unsigned int nb_msg_envoye = 0 ;
+unsigned int nb_msg_perdu = 0 ;
+float perte_acceptee = 0.3 ;
+
+
 
 int mic_tcp_socket(start_mode sm) 
 // Permet de créer un socket entre l’application et MIC-TCP// Retourne le descripteur du socket ou bien -1 en cas d'erreur
@@ -17,7 +22,6 @@ int mic_tcp_socket(start_mode sm)
   sock.fd = 0 ;
   sock.state = IDLE ;
   tab_sock[0]=&sock ;
-  set_loss_rate(300);
   return tab_sock[0]->fd ;
 }
 
@@ -55,7 +59,7 @@ int mic_tcp_connect(int socket, mic_tcp_sock_addr addr) //ici il faut faire des 
 // Permet de réclamer l’établissement d’une connexion
 // Retourne 0 si la connexion est établie, et -1 en cas d’échec
 { 
-   
+  
   printf("[MIC-TCP] Appel de la fonction: ");  printf(__FUNCTION__); printf("\n");    // Seul la source peut demander la connexion 
 
   int lg_adresse= sizeof(mic_tcp_sock_addr);
@@ -66,10 +70,11 @@ int mic_tcp_connect(int socket, mic_tcp_sock_addr addr) //ici il faut faire des 
   SYNACK.payload.data=malloc(15);
   SYNACK.payload.size=15;
 
+ 
   // Socket distant initialisé
   socket_distant.state=IDLE;
 
-  while(1){
+  while(tab_sock[socket]->state !=ESTABLISHED){
 
     if (IP_send(SYN,socket_distant.addr)>=0){ // Envoi SYN
       tab_sock[socket]->state=SYN_SENT;
@@ -90,14 +95,13 @@ int mic_tcp_connect(int socket, mic_tcp_sock_addr addr) //ici il faut faire des 
 	      tab_sock[socket]->state=ESTABLISHED;  // Connexion établie
 	      printf("Connexion établie !!\n");
 	    }
-
-	    return 0;
-	    
 	  }
 	}
+
     } 
   } 
-
+  set_loss_rate(800); // !!!! Il faut le déplacer car l peut y avoir un problème en cas de perte du ACK
+  return 0 ;
 
 }
 
@@ -117,43 +121,59 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
   data_recu.size = 15 ;
   int erreur ;
 
-    // envoi comme en dessous
-    //mic_tcp_header
-    //numéro port source
-    pdu.hd.source_port=tab_sock[mic_sock]->addr.port;
-    //numéro port destination
-    pdu.hd.dest_port=socket_distant.addr.port;
-    //numéro de séquence 
-    pdu.hd.seq_num = num_sequence;
-    //numéro d'ACK
-    pdu.hd.ack_num = 42;//// /!\temporaire !!!!
-    //trois flag
-    pdu.hd.syn = 0;
-    pdu.hd.ack = 0;
-    pdu.hd.fin = 0;
-    //mic_tcp_payload
-    //données applicatives
-    pdu.payload.data = mesg;
-    //taille
-    pdu.payload.size = mesg_size ;
+  // envoi comme en dessous
+  //mic_tcp_header
+  //numéro port source
+  pdu.hd.source_port=tab_sock[mic_sock]->addr.port;
+  //numéro port destination
+  pdu.hd.dest_port=socket_distant.addr.port;
+  //numéro de séquence 
+  pdu.hd.seq_num = num_sequence;
+  //numéro d'ACK
+  pdu.hd.ack_num = 42;//// /!\temporaire !!!!
+  //trois flag
+  pdu.hd.syn = 0;
+  pdu.hd.ack = 0;
+  pdu.hd.fin = 0;
+  //mic_tcp_payload
+  //données applicatives
+  pdu.payload.data = mesg;
+  //taille
+  pdu.payload.size = mesg_size ;
+  nb_msg_envoye ++;
 
   while (envoi_ok ==0){
-
+    
     erreur = IP_send(pdu,tab_sock[mic_sock]->addr);
-
+   
     //IP receive pour recevoir un ack
-    if( IP_recv(&data_recu,&tab_sock[mic_sock]->addr,1000)!= -1){
-      ACK_recu = get_header(data_recu.data);
+    if( IP_recv(&data_recu,&tab_sock[mic_sock]->addr,1000)!= -1){ 
 
-      if((ACK_recu.ack ==1)&&(ACK_recu.ack_num == (num_sequence+1)%2)){
+      ACK_recu = get_header(data_recu.data);
+      if(((ACK_recu.ack ==1)&&(ACK_recu.ack_num == (num_sequence+1)%2))|| (envoi_ok != 1)){ //verification du ACK reçu
 	envoi_ok =1;
 	// mise a jour num sequence
 	num_sequence = (num_sequence +1)%2;
       }
-
+    }else {
+      nb_msg_perdu ++;
+      if((float)nb_msg_perdu/(float)nb_msg_envoye < perte_acceptee){
+	envoi_ok = 1;
+	num_sequence = (num_sequence +1)%2;
+	printf("---Perte tolérée \n");
+      }else{
+	nb_msg_perdu -- ;
+      }
     }
+
   }
   
+  printf("---Nb de messages envoyés : %d \n",nb_msg_envoye);
+  printf("---Nb de messages perdu : %d \n",nb_msg_perdu);
+  float prec = ((float)nb_msg_perdu/(float)nb_msg_envoye);
+  printf("---Perte actuelle : %f \n",prec);
+
+
   if(erreur==-1){
     return -1 ;
   }else {
@@ -234,6 +254,7 @@ void process_received_PDU(mic_tcp_pdu pdu)
     }
 
   }else {//etablissement de connexion
+
     if(sock.state ==IDLE){
 
       if(pdu.hd.syn==1){//on a reçu un SYN
@@ -255,6 +276,7 @@ void process_received_PDU(mic_tcp_pdu pdu)
 	printf("Connexion etablie !! \n");
       }
     }
+
   }
 
 }
