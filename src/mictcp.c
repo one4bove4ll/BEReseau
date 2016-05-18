@@ -179,7 +179,7 @@ int mic_tcp_send (int mic_sock, char* mesg, int mesg_size)
   float prec = ((float)nb_msg_perdu/(float)nb_msg_envoye);
   printf("---Perte actuelle : %f \n",prec);
 
-
+   free(data_recu.data);
   if(erreur==-1){
     return -1 ;
   }else {
@@ -195,13 +195,16 @@ int mic_tcp_recv (int socket, char* mesg, int max_mesg_size)
 // NB : cette fonction fait appel Ã  la fonction app_buffer_get() 
 {
   printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
-  
   mic_tcp_pdu pdu ;
   int nb_octets ;
   pdu.payload.data = mesg ; 
   pdu.payload.size = max_mesg_size ;
   nb_octets = app_buffer_get(pdu.payload) ;
   
+  if(sock.state == CLOSED){
+    return 666 ;
+  }
+
   if (nb_octets>0){
     return nb_octets;
   }else{
@@ -220,6 +223,8 @@ int mic_tcp_close (int socket) // ici il faut faire des choses
 
   mic_tcp_pdu FIN={{tab_sock[socket]->addr.port,socket_distant.addr.port,num_sequence,0,0,0,0},{"",0}};
   mic_tcp_payload data_recu;
+  data_recu.data = malloc(15);
+  data_recu.size = 15 ;
   mic_tcp_header reception ;
   int sortie_boucle = 0 ;
 
@@ -233,7 +238,7 @@ int mic_tcp_close (int socket) // ici il faut faire des choses
   do{ 
     printf("--- Envoi d'un FIN \n");
     IP_send(FIN,tab_sock[0]->addr);
-    if(IP_recv(&data_recu,&tab_sock[socket]->addr,1000)==-1){
+    if(IP_recv(&data_recu,&tab_sock[socket]->addr,1000)!=-1){
       reception = get_header(data_recu.data);
       if(reception.ack == 1 && reception.fin == 1){
 	sortie_boucle = 1 ;
@@ -250,7 +255,7 @@ int mic_tcp_close (int socket) // ici il faut faire des choses
   do{ 
     printf("--- Envoi d'un ACK \n");
     IP_send(FIN,tab_sock[0]->addr);
-    if(IP_recv(&data_recu,&tab_sock[0]->addr,1000)==-1){//on ne recoi plus rien
+    if(IP_recv(&data_recu,&tab_sock[0]->addr,10000)==-1){//on ne recoi plus rien
       sortie_boucle = 1 ;
     }
   }while(!sortie_boucle);//tout pendant quele ack n'est pas recu (on attend le silence)
@@ -258,7 +263,7 @@ int mic_tcp_close (int socket) // ici il faut faire des choses
   tab_sock[socket]->state = CLOSED ;
   printf("Connexion fermée !!!\n");
   
-
+   free(data_recu.data);
   return -1;
 }
 
@@ -271,6 +276,8 @@ void process_received_PDU(mic_tcp_pdu pdu)
   printf("[MIC-TCP] Appel de la fonction: "); printf(__FUNCTION__); printf("\n");
   mic_tcp_pdu ack ;
   mic_tcp_payload data_recu ;
+  data_recu.data = malloc(15);
+  data_recu.size = 15 ;
   mic_tcp_header reception ; 
   //mic_tcp_header
   //numÃ©ro port source
@@ -319,13 +326,13 @@ void process_received_PDU(mic_tcp_pdu pdu)
 	
 	sock.state = CLOSED;
 	printf("---Connexion fermée !!!!\n");
+	app_buffer_set(data_recu);
 
-      }else {
+    }else {
       //numero de sequence 
       ack.hd.ack_num = num_sequence;
       IP_send(ack,tab_sock[0]->addr);  //// /!\ c'est bizarre !!!!
     }
-
   }else if (sock.state !=CLOSED) {//etablissement de connexion
 
     if(sock.state ==IDLE){
@@ -361,5 +368,5 @@ void process_received_PDU(mic_tcp_pdu pdu)
     }
 
   }
-
+  free(data_recu.data);
 }

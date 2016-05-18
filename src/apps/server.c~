@@ -51,12 +51,11 @@ int main()
     while(1) {
         printf("[TSOCK] Attente d'une donnee, appel de mic_recv ...\n");
         int rcv_size = mic_tcp_recv(sockfd, chaine, MAX_SIZE);
+        printf("[TSOCK] Reception d'un message de taille : %d\n", rcv_size);
+        printf("[TSOCK] Message Recu : %s", chaine);
 	if(rcv_size == 666){
 		return 0 ;
 	}
-        printf("[TSOCK] Reception d'un message de taille : %d\n", rcv_size);
-        printf("[TSOCK] Message Recu : %s", chaine);
-
     }   
     return 0;
 }
